@@ -1,0 +1,22 @@
+*.o
+*.o.cmd
+*.ko
+*.mod
+*.mod.c
+*.symversions
+.*.cmd
+.*.o.d
+modules.order
+Module.symvers
+*.img
+*.dtb
+*.dts
+
+# blobs/ 里是移植必需的预编译二进制，必须入库
+!blobs/vendor_dlkm/*.ko
+!blobs/**/*.so
+
+# qqcandy 移植的必需二进制
+!qqcandy/blobs/**/*.ko
+!qqcandy/blobs/**/*.so
+!qqcandy/blobs/*.img
