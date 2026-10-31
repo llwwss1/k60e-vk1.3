@@ -51,19 +51,23 @@ k60e/
 │   └── *.xml                  Vulkan version / deqp level 声明
 ├── blobs/
 │   ├── vendor_dlkm/           r54 的 3 个内核模块（kbase / mgm / prot_alloc）
-│   ├── vendor_extra/          本机缺的 5 个库（libc++、改过 atrace 的 libged、NDK 三件套）
-│   └── vendor/                r54 的 10 个用户态库（含打过补丁的 libGLES_mali.so）
+│   └── vendor_extra/          本机缺的 5 个库（libc++、改过 atrace 的 libged、NDK 三件套）
 ├── firmware/mali_csffw.bin    UK 1.38 固件（装成 mali_csffw.bin + mali_csffw_reload.bin）
 └── scripts/
-    ├── build_module.sh        从 blobs 组装 Magisk 模块
+    ├── build_module.sh        组装 Magisk 模块（10 个 r54 库取自仓库根 blobs/vendor）
     ├── install_module.sh      设备端安装（chmod + chcon）
-    └── patch_libgles_configs.py  复现 DDK 补丁
+    └── patch_libgles_configs.py  libGLES_mali.so 的 DDK 补丁（构建时自动调用）
+
+> r54 的 10 个用户态库不重复放进本目录，`build_module.sh` 直接读仓库根的
+> `blobs/vendor/`，并对 `libGLES_mali.so` 自动打补丁。
+> 构建依赖：`python3` + `capstone`（`pip install capstone`）。
 ```
 
 ## 安装
 
 ```bash
-# 1) 组装模块（在电脑上，需要本目录）
+# 1) 组装模块（在电脑上；需要 python3 + capstone）
+pip install capstone
 bash scripts/build_module.sh            # 产出 r54_k60e.zip
 
 # 2) 推到手机并安装（Magisk root）

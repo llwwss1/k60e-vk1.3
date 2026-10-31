@@ -16,8 +16,12 @@ fastboot reboot
 ## 1. 组装模块
 
 ```bash
+pip install capstone                   # 打补丁用
 bash scripts/build_module.sh           # 产出 r54_k60e.zip
 ```
+
+脚本会从**仓库根** `blobs/vendor/` 取 10 个 r54 用户态库，并自动对
+`libGLES_mali.so` 调用 `scripts/patch_libgles_configs.py`。
 
 模块内容：
 

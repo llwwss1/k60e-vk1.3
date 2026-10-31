@@ -1,9 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # 组装 K60E 的 Magisk 模块：r54_k60e.zip
+#
+# 依赖：
+#   - 仓库根的 blobs/vendor/（r54 的 10 个用户态库，来自 xaga 移植）
+#   - 本目录 blobs/vendor_extra/（本机额外需要的 5 个库）
+#   - 本目录 blobs/vendor_dlkm/（r54 的 3 个内核模块）
+#   - 本目录 firmware/mali_csffw.bin
+#   - python3 + capstone（给 libGLES_mali.so 打补丁）
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"          # k60e/
+ROOT="$(cd "$HERE/.." && pwd)"            # k60e/
+REPO="$(cd "$ROOT/.." && pwd)"            # 仓库根
 OUT="${1:-$ROOT/r54_k60e.zip}"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
@@ -16,17 +24,16 @@ mkdir -p "$M/ko" \
          "$M/system/vendor/etc/permissions"
 
 # --- 元信息 + 脚本 ---
-cp "$ROOT/files/module.prop"      "$M/module.prop"
-cp "$ROOT/files/system.prop"      "$M/system.prop"
-cp "$ROOT/files/post-fs-data.sh"  "$M/post-fs-data.sh"
+cp "$ROOT/files/module.prop"     "$M/module.prop"
+cp "$ROOT/files/system.prop"     "$M/system.prop"
+cp "$ROOT/files/post-fs-data.sh" "$M/post-fs-data.sh"
 chmod 755 "$M/post-fs-data.sh"
 
-# --- 内核模块（只换 kbase / mgm / prot_alloc，ged、gpueb 保持原厂）---
+# --- 内核模块（只换 kbase / mgm / prot_alloc；ged、gpueb 保持原厂）---
 cp "$ROOT/blobs/vendor_dlkm/"*.ko "$M/ko/"
 
-# --- r54 用户态库（10 个）---
-for f in lib64/egl/mt6895/libGLES_mali.so \
-         lib64/egl/libGLES_meow.so \
+# --- r54 用户态库（10 个，来自仓库根 blobs/vendor）---
+for f in lib64/egl/libGLES_meow.so \
          lib64/egl/libMEOW_gift.so lib64/egl/libMEOW_trace.so lib64/egl/libMEOW_qt.so \
          lib64/egl/libMEOW_data.so lib64/egl/libMEOW_mfrc_ext.so \
          lib64/libgpud.so lib64/libmtk_mali_user.so \
@@ -35,11 +42,16 @@ for f in lib64/egl/mt6895/libGLES_mali.so \
          lib64/mt6895/libarm_gralloc_properties_sysprop.so \
          lib64/mt6895/libarm_egl_properties_sysprop.so \
          lib64/mt6895/arm.graphics-V5-ndk.so ; do
-    src="$ROOT/blobs/vendor/$f"
+    src="$REPO/blobs/vendor/$f"
     [ -f "$src" ] || { echo "缺 $src" >&2; exit 1; }
     mkdir -p "$M/system/vendor/$(dirname "$f")"
     cp "$src" "$M/system/vendor/$f"
 done
+
+# --- libGLES_mali.so：打 get_configs 的 bad_optional_access 补丁 ---
+python3 "$ROOT/scripts/patch_libgles_configs.py" \
+        "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
+        "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so"
 
 # --- 本机缺的 5 个（libc++、改过 atrace 的 libged、NDK 三件套）---
 for f in libc++.so libged.so \
@@ -59,4 +71,4 @@ cp "$ROOT/files/android.software.vulkan.deqp.level.xml" \
    "$M/system/vendor/etc/permissions/android.software.vulkan.deqp.level.xml"
 
 ( cd "$BUILD" && zip -qr "$OUT" r54gpu )
-echo "生成: $OUT ($(stat -c %s "$OUT" 2>/dev/null || stat -f %z "$OUT") 字节)"
+echo "生成: $OUT ($(wc -c < "$OUT") 字节)"
