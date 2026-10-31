@@ -57,5 +57,24 @@ if [ -n "$RP" ]; then
   echo "[INFO] vulkan: hwui_use_vulkan=$(getprop ro.hwui.use_vulkan) renderer=$(getprop debug.hwui.renderer)"
 fi
 
+
+
+# ---- SELinux：r54 驱动要读 ro.vendor.arm.* / vendor.mali.*，
+#      本机策略默认禁止 app 域读 vendor_default_prop（微信相机会因此 invalid EGLDisplay）----
+MP=/data/adb/magisk/magiskpolicy
+if [ -x "$MP" ]; then
+  "$MP" --live     "allow appdomain vendor_default_prop file { read open getattr map }"     "allow appdomain vendor_mtk_gpu_prop file { read open getattr map }" 2>/dev/null     && echo "[ OK ] sepolicy: appdomain 可读 vendor 属性"
+fi
+
+# ---- 逐条应用模块 system.prop（不依赖 Magisk 的 system.prop 机制）----
+if [ -n "$RP" ] && [ -f "$MODDIR/system.prop" ]; then
+  n=0
+  while IFS='=' read -r k v; do
+    case "$k" in ""|"#"*) continue ;; esac
+    "$RP" -n "$k" "$v" 2>/dev/null && n=$((n+1))
+  done < "$MODDIR/system.prop"
+  echo "[INFO] system.prop applied: $n"
+fi
+
 echo "[INFO] firmware: $(ls -l /vendor/firmware/mali_csffw*.bin 2>/dev/null | wc -l) 份"
 echo "===== r54_k60e done ====="

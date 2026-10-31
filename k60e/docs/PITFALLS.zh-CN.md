@@ -230,3 +230,46 @@ adb reboot
 
 每次改机前先清零 bootloop 计数；设备起不来时**先看 `magisk.log` 有没有
 `Safe mode triggered`**，再怀疑移植本身。
+
+---
+
+## 11. 应用读不到 `ro.vendor.arm.*` → 微信相机闪退
+
+**现象**
+
+装完模块后，微信「扫一扫」正常，但「相机」一进就整个应用退出；系统相机正常。
+日志里没有 tombstone，只有：
+
+```
+E com.tencent.mm: [SurfaceTexture-0-XXX] checkAndUpdateEglState: invalid current EGLDisplay
+I com.tencent.mm: System.exit called, status: 1
+W libc: Access denied finding property "ro.vendor.arm.egl.configs.…"     ← 几百条
+```
+
+**判断**
+
+`ro.vendor.arm.*` 在本机命中 `ro.vendor.` → `u:object_r:vendor_default_prop`，
+而本机策略**不允许 app 域读 `vendor_default_prop`**。r54 驱动在应用进程里读不到
+EGL config 属性，配置列表就是错的；`SurfaceTexture` 校验发现 EGLDisplay 状态不一致，
+微信遂自行 `System.exit(1)`（不是崩溃，是主动退出，所以没有 tombstone）。
+
+验证方法：
+
+```bash
+adb shell su -c 'getprop | grep -c ro.vendor.arm'                      # 56
+adb shell 'getprop | grep -c ro.vendor.arm'                            # 0  ← shell 也读不到
+adb shell su -c 'logcat -d | grep -c "Access denied finding property .ro.vendor.arm"'
+```
+
+**结论**
+
+在模块 `post-fs-data.sh` 里放行（`appdomain` 覆盖所有应用域）：
+
+```sh
+magiskpolicy --live   "allow appdomain vendor_default_prop file { read open getattr map }"   "allow appdomain vendor_mtk_gpu_prop file { read open getattr map }"
+```
+
+放行后微信相机恢复正常。副作用：应用可以读到其它 `vendor_default_prop`（只读，风险很低）。
+
+> 顺带：本机的属性机制会让 **shell 用户也读不到** 这些 `ro.vendor.arm.*`，
+> 排查时一定要用 `su -c getprop`，否则会误判成"属性没生效"。
