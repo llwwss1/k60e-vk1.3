@@ -100,6 +100,19 @@ adb reboot
 
 不刷任何分区，重启即回原厂 r32。
 
+## 排查前先看这条
+
+设备连续起不来几次后，Magisk 会把 bootloop 计数累加到 3~7，然后**安全模式把所有模块
+静默 `disable`**（`/cache/magisk.log` 里有 `Safe mode triggered`），表现成「模块装了但没生效」，
+极容易误判成移植失败。每次改机前先做：
+
+```bash
+adb shell su -c '/debug_ramdisk/magisk --sqlite "update settings set value=0 where key=\x27bootloop\x27"'
+adb shell su -c 'rm -f /data/adb/modules/*/disable'
+```
+
+详见 `docs/PITFALLS.zh-CN.md` 第 10 条、`docs/RECOVERY.zh-CN.md` 的 B 节。
+
 ## 许可
 
 `libGLES_mali.so` / `mali_kbase*.ko` / `mali_csffw.bin` / `libgpud.so` 等是 ARM / MTK 的专有二进制，
