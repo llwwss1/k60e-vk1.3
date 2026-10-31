@@ -287,3 +287,53 @@ allow { … }            vendor_mtk_gpu_prop file { read open getattr map }
 
 > 顺带：本机的属性机制会让 **shell 用户也读不到** 这些 `ro.vendor.arm.*`，
 > 排查时一定要用 `su -c getprop`，否则会误判成"属性没生效"。
+
+---
+
+## 12. 换回 r32 却没关 Vulkan 属性 → 卡第一屏
+
+**现象**
+
+禁用 `r54gpu` 模块、想回到原厂 r32，重启后卡在第一屏。adb 可用，日志里 SurfaceFlinger 每 5 秒一次：
+
+```
+F libc: Fatal signal 6 (SIGABRT) ... surfaceflinger
+Abort message: 'GrDirectContext creation failed'
+```
+
+**判断**
+
+`GrDirectContext` 是 Skia 的 GPU 上下文（GL 或 Vulkan）。SF 用的是 **Vulkan 版 RenderEngine**，
+而 r32 驱动（v1.r32p1-01eac0）的 Vulkan 能力不满足 Skia 的要求，于是一启动就 abort。
+
+属性来源（本例是 Scene 模块）：
+
+```
+/data/adb/modules/scene_systemless/system.prop
+  debug.renderengine.vulkan=true     ← SF 的 RenderEngine 走 Vulkan
+  ro.hwui.use_vulkan=true            ← HWUI 走 Vulkan
+  debug.hwui.renderer=skiavk         ← HWUI 强制 Vulkan
+```
+
+**结论**
+
+三个属性和驱动版本必须**成套切换**：
+
+| 驱动 | `debug.renderengine.vulkan` | `ro.hwui.use_vulkan` | `debug.hwui.renderer` |
+|---|---|---|---|
+| r54p1 | `true` | `true` | `skiavk` |
+| r32p1（原厂） | `false` | `false` | `skiagl` |
+
+只禁用模块、不改属性 → r32 驱动 + Vulkan 渲染 → 卡第一屏。
+
+**切回 r32 的正确步骤**
+
+```bash
+S=/data/adb/modules/scene_systemless/system.prop
+sed -i 's/^debug\.renderengine\.vulkan=true$/debug.renderengine.vulkan=false/' "$S"
+sed -i 's/^ro\.hwui\.use_vulkan=true$/ro.hwui.use_vulkan=false/'               "$S"
+sed -i 's/^debug\.hwui\.renderer=skiavk$/debug.hwui.renderer=skiagl/'           "$S"
+touch /data/adb/modules/r54gpu/disable
+```
+
+> 救援：卡屏时 adb 仍可用，`resetprop` 改掉三个属性后 `killall surfaceflinger` 就能自愈。
