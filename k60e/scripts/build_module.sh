@@ -61,8 +61,10 @@ for f in lib64/egl/libGLES_meow.so \
 done
 
 # --- libGLES_mali.so：get_configs 补丁 + 可选 Vulkan 1.4 版本声明 ---
+# 注：r54p1 的 1.4 核心特性全部为 false，声明 1.4 与规范不自洽；
+#     只有想骗过"只查版本号"的应用时才设 VULKAN14=1。
 PATCH_ARGS=""
-[ "${VULKAN14:-1}" = "1" ] && PATCH_ARGS="--vulkan14"
+[ "${VULKAN14:-0}" = "1" ] && PATCH_ARGS="--vulkan14"
 "$PY" "$ROOT/scripts/patch_libgles_configs.py" \
         "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
         "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so" $PATCH_ARGS
@@ -79,8 +81,13 @@ done
 cp "$ROOT/firmware/mali_csffw.bin" "$M/system/vendor/firmware/mali_csffw.bin"
 cp "$ROOT/firmware/mali_csffw.bin" "$M/system/vendor/firmware/mali_csffw_reload.bin"
 cp "$ROOT/files/mali_platform.config" "$M/system/vendor/etc/mali_platform.config"
-cp "$ROOT/files/android.hardware.vulkan.version.xml" \
-   "$M/system/vendor/etc/permissions/android.hardware.vulkan.version.xml"
+if [ "${VULKAN14:-0}" = "1" ]; then
+    cp "$ROOT/files/android.hardware.vulkan.version-vk14.xml" \
+       "$M/system/vendor/etc/permissions/android.hardware.vulkan.version.xml"
+else
+    cp "$ROOT/files/android.hardware.vulkan.version.xml" \
+       "$M/system/vendor/etc/permissions/android.hardware.vulkan.version.xml"
+fi
 cp "$ROOT/files/android.software.vulkan.deqp.level.xml" \
    "$M/system/vendor/etc/permissions/android.software.vulkan.deqp.level.xml"
 

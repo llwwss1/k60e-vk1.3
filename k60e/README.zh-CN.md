@@ -39,11 +39,32 @@ r54p1 这套 DDK 已经带齐 Vulkan 1.4 提升为 core 的全部扩展
    从 1.3.305 改成 1.4.0（改的是 `mov w?, #0x3131` → `mov w?, #0x4000` 两处，
    `0x00403131 → 0x00404000`）。
 
-**真实差距**：`cmd gpu vkjson` 的 `core14.features` 段 21 项全部为 0 —— 也就是 1.4 的
-*core 特性*没有在 `VkPhysicalDeviceVulkan14Features` 里报出来（特性只以 KHR/EXT 扩展形式存在）。
-所以现在属于「版本与属性是 1.4，核心特性还是 0」：按版本号判断的应用能过，
-严谨比对 `VkPhysicalDeviceVulkan14Features` 的应用仍会认为不支持 1.4。
-这一层只能在 DDK 内部实现，改不了。不想要 1.4 声明时去掉 `--vulkan14` 即可。
+**真实差距（已用 Vulkan Hardware Capability Viewer 复核）**：`VkPhysicalDeviceVulkan14Features`
+里的 21 项 1.4 核心特性**全部为 false**（`maintenance5/6`、`shaderFloatControls2`、
+`shaderSubgroupRotate`、`shaderExpectAssume`、`vertexAttributeInstanceRateDivisor/ZeroDivisor`、
+`indexTypeUint8`、`dynamicRenderingLocalRead`、`rectangularLines`、`bresenhamLines`、
+`stippled*Lines`、`pushDescriptor`、`globalPriorityQuery`、`hostImageCopy`、
+`pipelineRobustness`、`pipelineProtectedAccess` …）。
+
+也就是说 **r54p1 是「1.4 扩展齐全 + 1.4 属性齐全，但 core 特性不报告」**：
+特性只以 KHR/EXT 扩展形式存在，没有提升进 core 结构体。这是 DDK 内部实现，
+改不了（除非换新 DDK）。
+
+结论：
+- 按**版本号**判断的应用（`apiVersion` / `android.hardware.vulkan.version`）→ 看到 1.4，能过；
+- 按**特性结构体**判断的应用（`VkPhysicalDeviceVulkan14Features`）→ 看到全 false，会认为不支持 1.4。
+
+因为“版本 1.4 + 特性全 false”在规范上是不自洽的（1.4 要求这些特性必须支持），
+**默认不开启版本补丁**；确实需要骗过“只查版本号”的应用时才加 `--vulkan14`：
+
+```bash
+VULKAN14=1 bash scripts/build_module.sh    # 版本号也报 1.4
+bash scripts/build_module.sh               # 默认：保持驱动原本的 1.3.305
+```
+
+`vendor/etc/permissions/android.hardware.vulkan.version.xml` 里的特性号同理：
+默认 4206592（1.3.0），开 1.4 时改 4210688。
+
 
 
 ## 目标机
