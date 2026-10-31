@@ -13,8 +13,20 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"            # k60e/
 REPO="$(cd "$ROOT/.." && pwd)"            # 仓库根
 OUT="${1:-$ROOT/r54_k60e.zip}"
+# 统一成绝对路径（后面要 cd 到临时目录里打包）
+OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
+
+# 找一个装了 capstone 的 python（Windows 上 python3/python 可能是两个不同的解释器）
+PY=""
+for cand in python3 python; do
+    if command -v "$cand" >/dev/null 2>&1 && "$cand" -c "import capstone" >/dev/null 2>&1; then
+        PY="$cand"
+        break
+    fi
+done
+[ -n "$PY" ] || { echo "需要 python + capstone：pip install capstone" >&2; exit 1; }
 
 M="$BUILD/r54gpu"
 mkdir -p "$M/ko" \
@@ -49,7 +61,7 @@ for f in lib64/egl/libGLES_meow.so \
 done
 
 # --- libGLES_mali.so：打 get_configs 的 bad_optional_access 补丁 ---
-python3 "$ROOT/scripts/patch_libgles_configs.py" \
+"$PY" "$ROOT/scripts/patch_libgles_configs.py" \
         "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
         "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so"
 
@@ -70,5 +82,18 @@ cp "$ROOT/files/android.hardware.vulkan.version.xml" \
 cp "$ROOT/files/android.software.vulkan.deqp.level.xml" \
    "$M/system/vendor/etc/permissions/android.software.vulkan.deqp.level.xml"
 
-( cd "$BUILD" && zip -qr "$OUT" r54gpu )
+if command -v zip >/dev/null 2>&1; then
+    ( cd "$BUILD" && zip -qr "$OUT" r54gpu )
+else
+    ( cd "$BUILD" && "$PY" - <<'PY' "$OUT"
+import os, sys, zipfile
+out = sys.argv[1]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, _dirs, files in os.walk("r54gpu"):
+        for name in files:
+            p = os.path.join(root, name)
+            z.write(p, p)
+PY
+    )
+fi
 echo "生成: $OUT ($(wc -c < "$OUT") 字节)"
