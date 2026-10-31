@@ -195,3 +195,38 @@ r54 的 `ged.ko` 依赖更新内核的 `MTKGPUQoS_*`、`sspm_reserve_mem_*`，
 
 **结论**：只换 `mali_kbase_mt6895` / `mali_mgm` / `mali_prot_alloc` 三个。
 `gpueb.ko` 同理保持原厂（GPUEB 固件还带 RSA 签名，动不了）。
+---
+
+## 10. Magisk 的安全模式会静默关掉所有模块（排查时第一个看）
+
+**现象**
+
+移植失败时设备反复重启 → Magisk 的 bootloop 计数一路累加到 3~7 →
+`/cache/magisk.log` 里出现 `* Safe mode triggered` →
+Magisk 会**给所有** `/data/adb/modules/*` 写入 `disable` 文件（包括完全无关的模块）。
+
+结果就是：模块"看起来装了但没生效"、`post-fs-data.sh` 根本没跑、
+`/vendor` 下也看不到 overlay 的文件，很容易误判成移植本身的问题。
+
+**判断**
+
+```bash
+adb shell su -c 'tail -n 50 /cache/magisk.log | grep -i "safe mode"'
+adb shell su -c 'ls /data/adb/modules/*/disable'
+adb shell su -c '/debug_ramdisk/magisk --sqlite "select * from settings where key=\x27bootloop\x27"'
+```
+
+**处理**
+
+```bash
+adb shell su -c '/debug_ramdisk/magisk --sqlite "update settings set value=0 where key=\x27bootloop\x27"'
+adb shell su -c 'rm -f /data/adb/modules/*/disable'
+adb reboot
+```
+
+`disable` 是空文件，删掉即恢复；计数清零后不会再因为历史失败次数触发安全模式。
+
+**建议**
+
+每次改机前先清零 bootloop 计数；设备起不来时**先看 `magisk.log` 有没有
+`Safe mode triggered`**，再怀疑移植本身。

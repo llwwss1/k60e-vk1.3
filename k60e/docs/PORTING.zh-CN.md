@@ -13,6 +13,14 @@ fastboot flash vendor_dlkm stock/vendor_dlkm.img
 fastboot reboot
 ```
 
+改机前先清零 Magisk 的 bootloop 计数，否则连续几次失败后安全模式会把所有模块静默
+`disable`（见 PITFALLS 第 10 条）：
+
+```bash
+adb shell su -c '/debug_ramdisk/magisk --sqlite "update settings set value=0 where key=\x27bootloop\x27"'
+adb shell su -c 'rm -f /data/adb/modules/*/disable'
+```
+
 ## 1. 组装模块
 
 ```bash
