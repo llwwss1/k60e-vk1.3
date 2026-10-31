@@ -20,3 +20,7 @@ Module.symvers
 !qqcandy/blobs/**/*.ko
 !qqcandy/blobs/**/*.so
 !qqcandy/blobs/*.img
+
+# k60e 移植的必需二进制（MT6896）
+!k60e/blobs/**/*.ko
+!k60e/blobs/**/*.so
