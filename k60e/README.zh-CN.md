@@ -41,8 +41,9 @@ dumpsys gfxinfo <pkg> → Pipeline=Skia (Vulkan)
 k60e/
 ├── README.zh-CN.md
 ├── docs/
-│   ├── PITFALLS.zh-CN.md      9 个坑：现象 / 判断 / 结论
-│   └── PORTING.zh-CN.md       从零复现的操作步骤
+│   ├── PITFALLS.zh-CN.md      10 个坑：现象 / 判断 / 结论
+│   ├── PORTING.zh-CN.md       从零复现的操作步骤
+│   └── RECOVERY.zh-CN.md      出问题时的恢复步骤（含 Magisk 安全模式）
 ├── files/
 │   ├── module.prop            Magisk 模块描述
 │   ├── system.prop            44 条 EGL + 12 条 gralloc + Vulkan 开关
