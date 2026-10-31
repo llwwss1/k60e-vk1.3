@@ -60,14 +60,22 @@ for f in lib64/egl/libGLES_meow.so \
     cp "$src" "$M/system/vendor/$f"
 done
 
-# --- libGLES_mali.so：get_configs 补丁 + 可选 Vulkan 1.4 版本声明 ---
-# 注：r54p1 的 1.4 核心特性全部为 false，声明 1.4 与规范不自洽；
-#     只有想骗过"只查版本号"的应用时才设 VULKAN14=1。
+# --- libGLES_mali.so：默认原厂驱动，不打补丁 ---
+# r54p1 抛 bad_optional_access 的真实原因是 SELinux 不让读 ro.vendor.arm.*（见 PITFALLS 11），
+# 用 sepolicy.rule 放行即可，不再需要二进制补丁。
+#   可选：VULKAN14=1      → 设备级 apiVersion 改报 1.4.0（与规范不自洽，慎用）
+#         GET_CONFIGS=1   → 历史补丁：nop 掉 get_configs 的 17 条失败分支（无 sepolicy 时用）
 PATCH_ARGS=""
-[ "${VULKAN14:-0}" = "1" ] && PATCH_ARGS="--vulkan14"
-"$PY" "$ROOT/scripts/patch_libgles_configs.py" \
-        "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
-        "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so" $PATCH_ARGS
+[ "${VULKAN14:-0}" = "1" ] && PATCH_ARGS="$PATCH_ARGS --vulkan14"
+[ "${GET_CONFIGS:-0}" = "1" ] && PATCH_ARGS="$PATCH_ARGS --get-configs"
+if [ -n "$PATCH_ARGS" ]; then
+    "$PY" "$ROOT/scripts/patch_libgles.py" \
+            "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
+            "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so" $PATCH_ARGS
+else
+    cp "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
+       "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so"
+fi
 
 # --- 本机缺的 5 个（libc++、改过 atrace 的 libged、NDK 三件套）---
 for f in libc++.so libged.so \
@@ -91,10 +99,18 @@ fi
 cp "$ROOT/files/android.software.vulkan.deqp.level.xml" \
    "$M/system/vendor/etc/permissions/android.software.vulkan.deqp.level.xml"
 
+# --- SELinux 规则：让 app / surfaceflinger 能读 ro.vendor.arm.* ---
+cp "$ROOT/files/sepolicy.rule" "$M/sepolicy.rule"
+
 if command -v zip >/dev/null 2>&1; then
     ( cd "$BUILD" && zip -qr "$OUT" r54gpu )
 else
-    ( cd "$BUILD" && "$PY" - <<'PY' "$OUT"
+    # Windows 上的 python 不认 MSYS 的 /c/... 路径，需要转一下
+    OUT_PY="$OUT"
+    if command -v cygpath >/dev/null 2>&1; then
+        OUT_PY="$(cygpath -w "$OUT")"
+    fi
+    ( cd "$BUILD" && "$PY" - "$OUT_PY" <<'PY'
 import os, sys, zipfile
 out = sys.argv[1]
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:

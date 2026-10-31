@@ -1,0 +1,10 @@
+# r54p1 驱动要读 ro.vendor.arm.* （EGL config / gralloc 用法掩码）和 vendor.mali.*
+# 本机策略里 ro.vendor. 命中 vendor_default_prop，而 app/surfaceflinger 域默认读不到，
+# 导致驱动建不出正确 EGL 配置（表现为微信相机 invalid EGLDisplay 闪退、SF 抛 bad_optional_access）。
+# 这里只放开"读"，风险很低。
+allow appdomain vendor_default_prop file { read open getattr map }
+allow appdomain vendor_mtk_gpu_prop file { read open getattr map }
+allow surfaceflinger vendor_default_prop file { read open getattr map }
+allow surfaceflinger vendor_mtk_gpu_prop file { read open getattr map }
+allow bootanim vendor_default_prop file { read open getattr map }
+allow gpu_device vendor_default_prop file { read open getattr map }

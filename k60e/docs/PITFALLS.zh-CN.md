@@ -117,7 +117,7 @@ service insmod_sh /vendor/bin/init.insmod.sh /vendor/etc/init.insmod.${ro.hardwa
 
 ---
 
-## 6. `eglInitialize` 抛 `bad_optional_access`（本机特有）
+## 6. `eglInitialize` 抛 `bad_optional_access`（根因是 SELinux，补丁只是权宜）
 
 **现象**
 
@@ -148,7 +148,14 @@ python3 scripts/patch_libgles_configs.py \
     blobs/vendor/lib64/egl/mt6895/libGLES_mali.so
 ```
 
-补丁只影响「拿不到配置就 abort」这一条路径，其余逻辑不动。副作用：`activeMode` 里
+补丁只影响「拿不到配置就 abort」这一条路径，其余逻辑不动。
+
+> **后续修正（重要）**：这个 abort 的真实根因是 **SELinux**——
+> `ro.vendor.arm.*` 命中 `vendor_default_prop`，而 `surfaceflinger` / 应用域默认读不到，
+> 驱动拿不到 EGL 配置属性才会抛异常。用 `sepolicy.rule` 放行后，**原厂 r54 驱动一个字节都不用改**
+> 就能正常启动（见第 11 条）。`--get-configs` 补丁现在只在无法改 SELinux 策略时才需要
+> （`GET_CONFIGS=1 bash scripts/build_module.sh`）。
+副作用：`activeMode` 里
 `supportedHdrTypes=INVALID`（10-bit/HDR 相关的 config 可能没注册），待进一步收窄。
 
 ---
@@ -263,11 +270,18 @@ adb shell su -c 'logcat -d | grep -c "Access denied finding property .ro.vendor.
 
 **结论**
 
-在模块 `post-fs-data.sh` 里放行（`appdomain` 覆盖所有应用域）：
+在模块里放行（`files/sepolicy.rule`，Magisk 会自动加载；`post-fs-data.sh` 里再补一次 live 版）：
 
-```sh
-magiskpolicy --live   "allow appdomain vendor_default_prop file { read open getattr map }"   "allow appdomain vendor_mtk_gpu_prop file { read open getattr map }"
 ```
+allow appdomain        vendor_default_prop file { read open getattr map }
+allow surfaceflinger   vendor_default_prop file { read open getattr map }
+allow bootanim         vendor_default_prop file { read open getattr map }
+allow gpu_device       vendor_default_prop file { read open getattr map }
+allow { … }            vendor_mtk_gpu_prop file { read open getattr map }
+```
+
+`surfaceflinger` 也必须放行：它读不到时会在 `eglInitialize` 里抛 `bad_optional_access`
+（PITFALLS 第 6 条），这就是之前要靠二进制补丁才能开机的原因。
 
 放行后微信相机恢复正常。副作用：应用可以读到其它 `vendor_default_prop`（只读，风险很低）。
 

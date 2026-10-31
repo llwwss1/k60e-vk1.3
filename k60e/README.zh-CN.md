@@ -33,11 +33,11 @@ r54p1 这套 DDK 已经带齐 Vulkan 1.4 提升为 core 的全部扩展
 `vkGetDeviceImageSubresourceLayout`、`vkCopyMemoryToImageEXT` … 15 个里 13 个在，
 缺的两个属可选扩展）。
 
-本移植做了两层：
-1. Android 侧声明（`vendor/etc/permissions/android.hardware.vulkan.version.xml`）→ 1.4.0；
-2. 驱动侧 `scripts/patch_libgles_configs.py --vulkan14` 把 `VkPhysicalDeviceProperties.apiVersion`
-   从 1.3.305 改成 1.4.0（改的是 `mov w?, #0x3131` → `mov w?, #0x4000` 两处，
-   `0x00403131 → 0x00404000`）。
+本移植默认**不改驱动二进制**，只做两件事：
+1. Android 侧 Vulkan 声明（`vendor/etc/permissions/android.hardware.vulkan.version.xml`）保持 1.3.0；
+2. 需要"设备级 1.4"时用 `VULKAN14=1` 打一个可选补丁：把
+   `VkPhysicalDeviceProperties.apiVersion` 从 1.3.305 改成 1.4.0
+   （`mov w?, #0x3131` → `mov w?, #0x4000`，`0x00403131 → 0x00404000`）。
 
 **真实差距（已用 Vulkan Hardware Capability Viewer 复核）**：`VkPhysicalDeviceVulkan14Features`
 里的 21 项 1.4 核心特性**全部为 false**（`maintenance5/6`、`shaderFloatControls2`、
@@ -87,8 +87,10 @@ bash scripts/build_module.sh               # 默认：保持驱动原本的 1.3.
 2. **内核模块在 post-fs-data 热替换**：本机 `init.insmod.sh` 的 `modprobe` 根本不加载 GPU 链
    （开机 dmesg 里连一条 `Unknown symbol` 都没有），所以不需要写 `vendor_dlkm` 分区，
    在 `post-fs-data.sh` 里 `rmmod` 原厂三个 → `insmod` r54 三个即可。
-3. **必须给 `libGLES_mali.so` 打二进制补丁**：本机 `get_configs()` 会抛
-   `bad_optional_access`（详见 PITFALLS 第 6 条），补丁把 17 条失败分支 nop 掉。
+3. **不改驱动二进制，改 SELinux**：本机策略不允许 `surfaceflinger` / 应用读
+   `ro.vendor.arm.*`（`vendor_default_prop`），r54 驱动拿不到 EGL 配置属性就会抛
+   `bad_optional_access`，应用侧则表现为微信相机闪退。用模块自带的 `sepolicy.rule`
+   放行即可（详见 PITFALLS 第 6、11 条）；原厂 `libGLES_mali.so` 一个字节都不用改。
 
 ## 目录
 
@@ -96,13 +98,14 @@ bash scripts/build_module.sh               # 默认：保持驱动原本的 1.3.
 k60e/
 ├── README.zh-CN.md
 ├── docs/
-│   ├── PITFALLS.zh-CN.md      10 个坑：现象 / 判断 / 结论
+│   ├── PITFALLS.zh-CN.md      11 个坑：现象 / 判断 / 结论
 │   ├── PORTING.zh-CN.md       从零复现的操作步骤
 │   └── RECOVERY.zh-CN.md      出问题时的恢复步骤（含 Magisk 安全模式）
 ├── files/
 │   ├── module.prop            Magisk 模块描述
 │   ├── system.prop            44 条 EGL + 12 条 gralloc + Vulkan 开关
-│   ├── post-fs-data.sh        内核模块热替换 + chcon + Vulkan 属性
+│   ├── post-fs-data.sh        内核模块热替换 + chcon + sepolicy + 属性
+│   ├── sepolicy.rule          放行 app/SF 读 ro.vendor.arm.*（关键）
 │   ├── mali_platform.config   AGT 频率 + OSU 受保护堆名
 │   └── *.xml                  Vulkan version / deqp level 声明
 ├── blobs/

@@ -63,7 +63,11 @@ fi
 #      本机策略默认禁止 app 域读 vendor_default_prop（微信相机会因此 invalid EGLDisplay）----
 MP=/data/adb/magisk/magiskpolicy
 if [ -x "$MP" ]; then
-  "$MP" --live     "allow appdomain vendor_default_prop file { read open getattr map }"     "allow appdomain vendor_mtk_gpu_prop file { read open getattr map }" 2>/dev/null     && echo "[ OK ] sepolicy: appdomain 可读 vendor 属性"
+  for d in appdomain surfaceflinger bootanim gpu_device; do
+    "$MP" --live "allow $d vendor_default_prop file { read open getattr map }" 2>/dev/null
+    "$MP" --live "allow $d vendor_mtk_gpu_prop file { read open getattr map }" 2>/dev/null
+  done
+  echo "[ OK ] sepolicy: appdomain/surfaceflinger/bootanim 可读 vendor 属性"
 fi
 
 # ---- 逐条应用模块 system.prop（不依赖 Magisk 的 system.prop 机制）----
