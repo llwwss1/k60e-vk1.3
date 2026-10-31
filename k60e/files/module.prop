@@ -1,6 +1,6 @@
 id=r54gpu
-name=Mali r54p1 for K60E (patched DDK)
-version=v13-patch1
-versionCode=13
-author=dsh
-description=r54p1 userspace + 3 r54 kernel modules + binary-patched libGLES_mali (nop get_configs abort)
+name=Mali r54p1 for Redmi K60E (MT6896)
+version=v1.0
+versionCode=1
+author=k60e-port
+description=r54p1 userspace via Magisk + r54 kbase/mgm/prot_alloc hot-swap + binary-patched libGLES_mali (get_configs abort bypass) + Vulkan HWUI
