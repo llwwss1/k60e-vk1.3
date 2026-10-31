@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""给 r54p1 的 libGLES_mali.so 打补丁：绕过 get_configs() 的 bad_optional_access。
+"""给 r54p1 的 libGLES_mali.so 打补丁。
 
-用法: python3 patch_libgles_configs.py <in.so> <out.so>
+用法: python3 patch_libgles_configs.py <in.so> <out.so> [--vulkan14]
 依赖: pip install capstone
+
+默认只修 get_configs() 的 bad_optional_access；
+加 --vulkan14 会把设备 VkPhysicalDeviceProperties.apiVersion 从 1.3.305 报成 1.4.0。
 """
 import struct
 import sys
@@ -62,16 +65,55 @@ def main(src, dst):
               file=sys.stderr)
         return 1
 
+    vulkan14 = "--vulkan14" in sys.argv
+    sites = patch_vulkan14(data, segs) if vulkan14 else []
+
     open(dst, "wb").write(data)
     print(f"patched branches: {len(patched)}")
     for addr in patched:
         print(f"  0x{addr:x}")
+    if vulkan14:
+        print(f"vulkan 1.4 apiVersion sites: {len(sites)}")
+        for addr in sites:
+            print(f"  0x{addr:x}")
     print(f"written: {dst} ({len(data)} bytes)")
     return 0
 
 
+def patch_vulkan14(data, segs):
+    """把 VkPhysicalDeviceProperties.apiVersion 从 1.3.305 (0x403131) 报成 1.4.0 (0x404000)。
+
+    驱动里的写法是：
+        mov  w<N>, #0x3131
+        ...
+        movk w<N>, #0x40, lsl #16
+        str  w<N>, [x0]           ; apiVersion 是 VkPhysicalDeviceProperties 的第一个字段
+    把 movz 的立即数 0x3131 换成 0x4000 即可（高半 0x40 不变 -> 0x00404000）。
+    """
+    sites = []
+    for vaddr, off, size, flags in segs:
+        if not (flags & 1):
+            continue
+        for p in range(off, off + size - 4 * 8, 4):
+            w1, = struct.unpack_from("<I", data, p)
+            if (w1 & 0x7F800000) != 0x52800000:             # MOVZ (32-bit)
+                continue
+            if ((w1 >> 5) & 0xFFFF) != 0x3131:
+                continue
+            rd = w1 & 0x1F
+            for k in range(1, 7):                            # 往后看 6 条
+                w2, = struct.unpack_from("<I", data, p + 4 * k)
+                if (w2 & 0x7F800000) == 0x72800000 and ((w2 >> 5) & 0xFFFF) == 0x40 \
+                        and ((w2 >> 21) & 3) == 1 and (w2 & 0x1F) == rd:
+                    data[p:p + 4] = struct.pack("<I", 0x52800000 | (0x4000 << 5) | rd)
+                    sites.append(vaddr + (p - off))
+                    break
+    return sites
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if len(positional) != 2:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main(positional[0], positional[1]))

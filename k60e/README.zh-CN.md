@@ -18,23 +18,33 @@ dumpsys gfxinfo <pkg> → Pipeline=Skia (Vulkan)
 |---|---|
 | `android.hardware.vulkan.version`（PackageManager 特性） | **4210688 = 1.4.0** |
 | 实例 `apiVersion`（loader） | **4210688 = 1.4.0** |
-| 物理设备 `apiVersion`（驱动自报） | 4206897 = **1.3.305** |
+| 物理设备 `apiVersion`（驱动自报） | **4210688 = 1.4.0**（补丁后；原厂自报 1.3.305） |
 | 驱动 conformanceVersion | 1.4.0.1 |
 | 对外扩展数 | 170 |
+| `core14.features` | **21 项全部为 0** ← 真实差距 |
+| `core14.properties` | 有值（`maxPushDescriptors=32`、`copySrcLayoutCount=4` …） |
 
 r54p1 这套 DDK 已经带齐 Vulkan 1.4 提升为 core 的全部扩展
-（`maintenance6/7`、`vertex_attribute_divisor`、`load_store_op_none`、`global_priority`、
+（`maintenance5/6/7`、`vertex_attribute_divisor`、`load_store_op_none`、`global_priority`、
 `map_memory2`、`shader_subgroup_rotate`、`shader_float_controls2`、`host_image_copy`、
 `dynamic_rendering_local_read`、`shader_replicated_composites` …），
-conformance 也是按 1.4 报的，所以「1.4 能力」本身就在，缺的只是驱动愿意把
-`VkPhysicalDeviceProperties.apiVersion` 报到 1.4。
+1.4 的核心命令入口也基本齐全（`vkCmdBindDescriptorSets2`、`vkCmdPushConstants2`、
+`vkMapMemory2`、`vkGetRenderingAreaGranularity`、`vkCmdSetRenderingAttachmentLocations`、
+`vkGetDeviceImageSubresourceLayout`、`vkCopyMemoryToImageEXT` … 15 个里 13 个在，
+缺的两个属可选扩展）。
 
-本移植把 Android 侧的声明（`vendor/etc/permissions/android.hardware.vulkan.version.xml`）
-改成了 1.4.0；驱动自报的设备版本仍是 1.3.305（硬编码在 `.so` 里，且不是明文常量，
-要改需要反汇编定位，风险较高，暂未做）。
+本移植做了两层：
+1. Android 侧声明（`vendor/etc/permissions/android.hardware.vulkan.version.xml`）→ 1.4.0；
+2. 驱动侧 `scripts/patch_libgles_configs.py --vulkan14` 把 `VkPhysicalDeviceProperties.apiVersion`
+   从 1.3.305 改成 1.4.0（改的是 `mov w?, #0x3131` → `mov w?, #0x4000` 两处，
+   `0x00403131 → 0x00404000`）。
 
-> 影响面：按 PackageManager 特性或实例版本判断的应用/游戏现在都能过；
-> 少数直接读 `VkPhysicalDeviceProperties.apiVersion` 的仍会看到 1.3.305。
+**真实差距**：`cmd gpu vkjson` 的 `core14.features` 段 21 项全部为 0 —— 也就是 1.4 的
+*core 特性*没有在 `VkPhysicalDeviceVulkan14Features` 里报出来（特性只以 KHR/EXT 扩展形式存在）。
+所以现在属于「版本与属性是 1.4，核心特性还是 0」：按版本号判断的应用能过，
+严谨比对 `VkPhysicalDeviceVulkan14Features` 的应用仍会认为不支持 1.4。
+这一层只能在 DDK 内部实现，改不了。不想要 1.4 声明时去掉 `--vulkan14` 即可。
+
 
 ## 目标机
 

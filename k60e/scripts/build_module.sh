@@ -60,10 +60,12 @@ for f in lib64/egl/libGLES_meow.so \
     cp "$src" "$M/system/vendor/$f"
 done
 
-# --- libGLES_mali.so：打 get_configs 的 bad_optional_access 补丁 ---
+# --- libGLES_mali.so：get_configs 补丁 + 可选 Vulkan 1.4 版本声明 ---
+PATCH_ARGS=""
+[ "${VULKAN14:-1}" = "1" ] && PATCH_ARGS="--vulkan14"
 "$PY" "$ROOT/scripts/patch_libgles_configs.py" \
         "$REPO/blobs/vendor/lib64/egl/mt6895/libGLES_mali.so" \
-        "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so"
+        "$M/system/vendor/lib64/egl/mt6895/libGLES_mali.so" $PATCH_ARGS
 
 # --- 本机缺的 5 个（libc++、改过 atrace 的 libged、NDK 三件套）---
 for f in libc++.so libged.so \
